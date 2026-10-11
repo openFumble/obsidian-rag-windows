@@ -56,6 +56,12 @@ jobs:
         shell: powershell
         run: .\install.ps1 -VaultPath "$pwd\tests\vault" -SkipOllama -Yes -ClaudeConfig "$env:RUNNER_TEMP\Claude\claude_desktop_config.json"
 
+      - name: Install as text, like the one-line command (must not close the shell)
+        shell: powershell
+        run: |
+          & ([scriptblock]::Create((Get-Content .\install.ps1 -Raw))) -VaultPath "$pwd\tests\vault" -SkipOllama -SkipIndex -Yes -ClaudeConfig "$env:RUNNER_TEMP\Claude\claude_desktop_config.json"
+          Write-Host "still running after the installer: OK"
+
       - name: Start the server exactly like Claude Desktop does
         shell: powershell
         run: |

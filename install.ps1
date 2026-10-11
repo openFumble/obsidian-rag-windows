@@ -33,6 +33,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
+# Started as a file (install.cmd / .\install.ps1) or as text (irm ... | iex)? "exit" would close the
+# whole PowerShell window in the second case, so only use it when running as a file.
+$script:RunAsFile = [bool]$PSCommandPath
 $RepoRaw = "https://raw.githubusercontent.com/openFumble/obsidian-rag-windows/main"
 
 function Write-Step($text) { Write-Host ""; Write-Host "==> $text" -ForegroundColor Cyan }
@@ -43,7 +46,8 @@ function Fail($text) {
     Write-Host ""
     Write-Host "ERROR: $text" -ForegroundColor Red
     Write-Host "Nothing was registered in Claude Desktop. Fix the problem and run the installer again."
-    exit 1
+    if ($script:RunAsFile) { exit 1 }
+    throw "Installation stopped."
 }
 
 function Ask-YesNo($question, [bool]$default = $true) {
@@ -271,4 +275,4 @@ Write-Host "Done." -ForegroundColor Green
 Write-Host "Start Claude Desktop and ask for example: 'Search my vault for ...'"
 Write-Host "The tools appear under the name '$ServerName'. Index, config and log: $InstallDir"
 Write-Host "Uninstall: $InstallDir\uninstall.cmd"
-if ($selfTestOk) { exit 0 } else { exit 3 }
+if ($script:RunAsFile) { if ($selfTestOk) { exit 0 } else { exit 3 } }

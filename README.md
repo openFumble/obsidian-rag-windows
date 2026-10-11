@@ -63,6 +63,12 @@ Your vault is not changed by the installation.
 irm https://raw.githubusercontent.com/openFumble/obsidian-rag-windows/main/install.ps1 | iex
 ```
 
+With options (example: a second entry for testing next to an existing setup):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/openFumble/obsidian-rag-windows/main/install.ps1))) -ServerName obsidian-rag-test
+```
+
 Options when running `install.ps1` directly:
 
 | Option | Meaning |
