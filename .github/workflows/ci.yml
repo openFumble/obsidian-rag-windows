@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Run test suite
+        run: uv run --python ${{ matrix.python }} --with "mcp>=1.10,<3" --with "sqlite-vec>=0.1.6,<0.2" python tests/test_obsidian_rag.py
+
+  installer:
+    name: Installer (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Scripts parse without errors
+        shell: powershell
+        run: |
+          foreach ($f in "install.ps1", "uninstall.ps1") {
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $f), [ref]$null, [ref]$errors) | Out-Null
+            if ($errors) { $errors | Format-List; throw "Syntax errors in $f" }
+            if ((Get-Content $f -Raw) -match '[^\x00-\x7F]') { throw "$f contains non-ASCII characters" }
+          }
+
+      - name: Start a fake Ollama on port 11434
+        shell: powershell
+        run: |
+          Start-Process -FilePath "uv" -ArgumentList @("run", "--python", "3.12", "python", "tests/fake_ollama.py", "--port", "11434") -WindowStyle Hidden
+          for ($i = 0; $i -lt 60; $i++) {
+            try { Invoke-RestMethod http://127.0.0.1:11434/api/tags | Out-Null; Write-Host "fake Ollama is up"; break } catch { Start-Sleep 1 }
+          }
+
+      - name: Install
+        shell: powershell
+        run: .\install.ps1 -VaultPath "$pwd\tests\vault" -SkipOllama -Yes -ClaudeConfig "$env:RUNNER_TEMP\Claude\claude_desktop_config.json"
+
+      - name: Install again (repair / update path)
+        shell: powershell
+        run: .\install.ps1 -VaultPath "$pwd\tests\vault" -SkipOllama -Yes -ClaudeConfig "$env:RUNNER_TEMP\Claude\claude_desktop_config.json"
+
+      - name: Start the server exactly like Claude Desktop does
+        shell: powershell
+        run: |
+          Get-Content "$env:RUNNER_TEMP\Claude\claude_desktop_config.json" -Raw
+          uv run --python 3.12 --with "mcp>=1.10,<3" python tests/smoke_claude_config.py "$env:RUNNER_TEMP\Claude\claude_desktop_config.json"
+
+      - name: Uninstall
+        shell: powershell
+        run: |
+          .\uninstall.ps1 -Yes -ClaudeConfig "$env:RUNNER_TEMP\Claude\claude_desktop_config.json"
+          $cfg = Get-Content "$env:RUNNER_TEMP\Claude\claude_desktop_config.json" -Raw | ConvertFrom-Json
+          if ($cfg.mcpServers.PSObject.Properties.Name -contains "obsidian-rag") { throw "entry still present" }
+          if (Test-Path "$env:LOCALAPPDATA\obsidian-rag-windows") { throw "install folder still present" }
+          Write-Host "Uninstall verified"
