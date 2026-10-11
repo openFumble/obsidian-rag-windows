@@ -15,7 +15,7 @@ jobs:
         python: ["3.11", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v5
       - name: Run test suite
         run: uv run --python ${{ matrix.python }} --with "mcp>=1.10,<3" --with "sqlite-vec>=0.1.6,<0.2" python tests/test_obsidian_rag.py
@@ -24,8 +24,11 @@ jobs:
     name: Installer (Windows PowerShell 5.1)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v5
+        with:
+          # the background fake Ollama keeps cache files open; pruning a locked cache fails on Windows
+          enable-cache: false
 
       - name: Scripts parse without errors
         shell: powershell
@@ -67,3 +70,10 @@ jobs:
           if ($cfg.mcpServers.PSObject.Properties.Name -contains "obsidian-rag") { throw "entry still present" }
           if (Test-Path "$env:LOCALAPPDATA\obsidian-rag-windows") { throw "install folder still present" }
           Write-Host "Uninstall verified"
+
+      - name: Stop the fake Ollama
+        if: always()
+        shell: powershell
+        run: |
+          Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*fake_ollama.py*" } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
